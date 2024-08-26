@@ -1,0 +1,17 @@
+.special-day {
+    /* Light red background for special days */
+    color: #000;
+    /* Black text for special days */
+    font-weight: bold;
+    /* Bold text for special days */
+    position: relative;
+    overflow: visible !important;
+}
+
+.tile-content {
+    position: absolute;
+    top: 10px;
+    left: 0;
+    width: 100%;
+    text-align: center;
+}

@@ -1,0 +1,30 @@
+{
+  "name": "seguro",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "type": "module",
+  "scripts": {
+    "dev": "npx nodemon src/app.js",
+    "start": "node src/app.js"
+  },
+  "author": "sarvesh",
+  "license": "ISC",
+  "dependencies": {
+    "D": "^1.0.0",
+    "body-parser": "^2.0.0-beta.1",
+    "cors": "^2.8.5",
+    "crypto-js": "^4.1.1",
+    "dotenv": "^16.3.1",
+    "express": "^4.19.2",
+    "express-validator": "^7.0.1",
+    "fs": "^0.0.1-security",
+    "joi": "^17.11.0",
+    "mysql2": "^3.6.2",
+    "nodemailer": "^6.9.7",
+    "nodemailer-ses-transport": "^1.5.1",
+    "nodemon": "^3.1.4",
+    "qrcode": "^1.5.3",
+    "stripe": "^14.4.0"
+  }
+}

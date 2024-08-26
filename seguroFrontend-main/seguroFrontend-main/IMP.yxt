@@ -1,0 +1,28 @@
+#Get The FE Data#
+SELECT 
+    p.propertyname AS Property_Name,
+    COALESCE(sp.monthly_charge, 0) AS Current_Rate,
+    p.number_of_rooms AS Number_Of_Rooms,
+    p.occupancy_cap AS Occupancy_Cap,  -- Added Occupancy_Cap column
+    COALESCE(p.last_pay_date, 'N/A') AS Last_Paid_Date,
+    COALESCE(p.planid, 0) AS Plan_ID,
+    COALESCE(p.plantype, 'N') AS Plan_Type,
+    COALESCE(sp.monthly_charge, 0) AS Last_Billed_Amount,
+    CASE
+        WHEN p.plan_expiry_date >= CURDATE() AND p.isactive = 1 THEN
+            CASE
+                WHEN p.plantype = 'M' THEN DATE_ADD(COALESCE(p.last_pay_date, CURDATE()), INTERVAL 1 MONTH)
+                WHEN p.plantype = 'Y' THEN DATE_ADD(COALESCE(p.last_pay_date, CURDATE()), INTERVAL 1 YEAR)
+                ELSE NULL
+            END
+        ELSE NULL
+    END AS Next_Billing_Date
+FROM 
+    properties p
+LEFT JOIN 
+    subscription_plans sp ON p.planid = sp.planid
+WHERE 
+    p.userid = 43;
+
+
+#Make Updates to these#
