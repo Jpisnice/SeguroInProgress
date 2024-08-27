@@ -494,7 +494,8 @@ export const getRoomDataByUserId = async (id) => {
 };
 
 export const getRoomStatus = async (date, roomId) => {
-    const [result] = await pool.query(`
+  const [result] = await pool.query(
+    `
         SELECT roomid, codeid, checkindatetime, checkoutdatetime, customerid, barcode 
         FROM codes 
         WHERE 
@@ -507,57 +508,72 @@ export const getRoomStatus = async (date, roomId) => {
                 (checkindatetime > CONCAT(?, ' 23:59:59') AND checkoutdatetime > checkindatetime)
             ) 
         LIMIT 1;
-    `, [roomId, date, date, date]);
+    `,
+    [roomId, date, date, date]
+  );
 
-    if (result.length > 0) {
-        const [customerData] = await pool.query(`
+  let response = { codeData: [] } ; // Initialize the response object
+
+  if (result.length > 0) {
+    const [customerData] = await pool.query(
+      `
             SELECT customername, email, mobile 
             FROM customers 
             WHERE isdeleted = 0 AND customerid = ? 
             LIMIT 1;
-        `, [result[0].customerid]);
+        `,
+      [result[0].customerid]
+    );
 
-        const checkInDate = result[0].checkindatetime.toISOString().split('T')[0];
-        const checkOutDate = result[0].checkoutdatetime.toISOString().split("T")[0];
-        
-        // Determine if the room is yet to be checked into
-        const isFutureCheckIn = new Date(checkInDate) > new Date(date);
+    const checkInDate = result[0].checkindatetime.toISOString().split("T")[0];
+    const checkOutDate = result[0].checkoutdatetime.toISOString().split("T")[0];
 
-        const setCheckInDate = isFutureCheckIn ? checkInDate : (checkInDate === date ? checkInDate : "");
-        const setCheckOutDate = checkOutDate === date ? checkOutDate : "";
+    // Determine if the room is yet to be checked into
+    const isFutureCheckIn = new Date(checkInDate) > new Date(date);
 
-        let roomStatus;
-        if (isFutureCheckIn) {
-            roomStatus = 3; // Room is booked but check-in is in the future
-        } else {
-            const [checkedInData] = await pool.query(`
+    const setCheckInDate = isFutureCheckIn
+      ? checkInDate
+      : checkInDate === date
+      ? checkInDate
+      : "";
+    const setCheckOutDate = checkOutDate === date ? checkOutDate : "";
+
+    let roomStatus;
+    if (isFutureCheckIn) {
+      roomStatus = 3; // Room is booked but check-in is in the future
+    } else {
+      const [checkedInData] = await pool.query(
+        `
                 SELECT code 
                 FROM codescanlogs 
                 WHERE code = ? AND isfoundvalid = 1 
                 LIMIT 1;
-            `, [result[0].barcode]);
+            `,
+        [result[0].barcode]
+      );
 
-            roomStatus = (checkedInData.length > 0) ? 1 : 2; // 1: Checked in, 2: Not checked in yet
-        }
-
-        var data = {
-            codeId: result[0].codeid,
-            roomStatus: roomStatus,
-            checkInDate: setCheckInDate,
-            checkOutDate: setCheckOutDate,
-            customerData: customerData[0]
-        };
-    } else {
-        var data = {
-            roomStatus: 0,
-            checkInDate: "",
-            checkOutDate: "",
-            customerData: ""
-        };
+      roomStatus = checkedInData.length > 0 ? 1 : 2; // 1: Checked in, 2: Not checked in yet
     }
 
-    return data;
+    response.codeData.push({
+      codeId: result[0].codeid,
+      roomStatus: roomStatus,
+      checkInDate: setCheckInDate,
+      checkOutDate: setCheckOutDate,
+      customerData: customerData[0],
+    });
+  } else {
+    response.codeData.push({
+      roomStatus: 0,
+      checkInDate: "",
+      checkOutDate: "",
+      customerData: "",
+    });
+  }
+  console.log(response);
+  return response;
 };
+
 
 
 export const getCodeData = async (codeId) => {
