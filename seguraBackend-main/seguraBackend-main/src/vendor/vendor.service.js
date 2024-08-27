@@ -1053,50 +1053,140 @@ export const setDefaultCheckinCheckoutTime = async (id, checkInTime, checkOutTim
     }
 }
 
+// export const getCodes = async (id) => {
+//     const currentDateTime = currentDateAndTime()
+
+//     // const [codeData] = await pool.query(`
+//     //     SELECT 
+//     //         codes.barcode AS qrCode, 
+//     //         codes.checkindatetime AS checkInDate, 
+//     //         codes.checkoutdatetime AS checkOutDate,
+//     //         CONCAT(rooms.ip_address, ', ', GROUP_CONCAT(areas.areaIpAddress SEPARATOR ', ')) AS ipList,
+//     //         CONCAT(rooms.unlock_duration, ', ', GROUP_CONCAT(areas.areaUnlockDuration SEPARATOR ', ')) AS unlockTimeList
+//     //     FROM codes 
+//     //     JOIN rooms ON rooms.roomid = codes.roomid
+//     //     JOIN properties ON rooms.propertyid = properties.propertyid 
+//     //     JOIN areas ON properties.propertyid = areas.propertyId 
+//     //     WHERE properties.userid = ? 
+//     //       AND codes.isdeleted = 0 
+//     //       AND properties.isdeleted = 0 
+//     //       AND properties.isactive = 1
+//     //       AND codes.checkindatetime <= ?
+//     //       AND codes.checkoutdatetime >= ?
+//     //     GROUP BY codes.barcode, codes.checkindatetime, codes.checkoutdatetime
+//     // `, [id, currentDateTime, currentDateTime]);
+
+//     const [codeData] = await pool.query(`
+//         SELECT 
+//             codes.barcode AS qrCode, 
+//             codes.checkindatetime AS checkInDate, 
+//             codes.checkoutdatetime AS checkOutDate,
+//             CONCAT(rooms.ip_address, IFNULL(CONCAT(', ', GROUP_CONCAT(areas.areaIpAddress SEPARATOR ', ')), '')) AS ipList,
+//             CONCAT(rooms.unlock_duration, IFNULL(CONCAT(', ', GROUP_CONCAT(areas.areaUnlockDuration SEPARATOR ', ')), '')) AS unlockTimeList
+//         FROM codes 
+//         JOIN rooms ON rooms.roomid = codes.roomid
+//         JOIN properties ON rooms.propertyid = properties.propertyid 
+//         LEFT JOIN areas ON properties.propertyid = areas.propertyId 
+//         WHERE properties.userid = ? 
+//           AND codes.isdeleted = 0 
+//           AND properties.isdeleted = 0 
+//           AND properties.isactive = 1
+//           AND codes.checkindatetime <= ?
+//           AND codes.checkoutdatetime >= ?
+//         GROUP BY codes.barcode, codes.checkindatetime, codes.checkoutdatetime, rooms.ip_address, rooms.unlock_duration
+//     `, [id, currentDateTime, currentDateTime]);
+
+//     return {
+//         "codeData": codeData
+//     };
+// }
 export const getCodes = async (id) => {
-    const currentDateTime = currentDateAndTime()
+  try {
+    // Initialize currentDateTime using the Date object
+    const currentDateTime = currentDateAndTime();
+    console.log("Current DateTime:", currentDateTime);
 
-    // const [codeData] = await pool.query(`
-    //     SELECT 
-    //         codes.barcode AS qrCode, 
-    //         codes.checkindatetime AS checkInDate, 
-    //         codes.checkoutdatetime AS checkOutDate,
-    //         CONCAT(rooms.ip_address, ', ', GROUP_CONCAT(areas.areaIpAddress SEPARATOR ', ')) AS ipList,
-    //         CONCAT(rooms.unlock_duration, ', ', GROUP_CONCAT(areas.areaUnlockDuration SEPARATOR ', ')) AS unlockTimeList
-    //     FROM codes 
-    //     JOIN rooms ON rooms.roomid = codes.roomid
-    //     JOIN properties ON rooms.propertyid = properties.propertyid 
-    //     JOIN areas ON properties.propertyid = areas.propertyId 
-    //     WHERE properties.userid = ? 
-    //       AND codes.isdeleted = 0 
-    //       AND properties.isdeleted = 0 
-    //       AND properties.isactive = 1
-    //       AND codes.checkindatetime <= ?
-    //       AND codes.checkoutdatetime >= ?
-    //     GROUP BY codes.barcode, codes.checkindatetime, codes.checkoutdatetime
-    // `, [id, currentDateTime, currentDateTime]);
+    // Calculate the date 10 days later
+    const tenDaysLater = new Date(
+      new Date(currentDateTime).setDate(
+        new Date(currentDateTime).getDate() + 10
+      )
+    )
+      .toISOString()
+      .slice(0, 19)
+      .replace("T", " ");
+    console.log("Ten Days Later:", tenDaysLater);
 
-    const [codeData] = await pool.query(`
+    // Fetch codes that are currently valid
+    const [currentCodeData] = await pool.query(
+      `
         SELECT 
             codes.barcode AS qrCode, 
             codes.checkindatetime AS checkInDate, 
             codes.checkoutdatetime AS checkOutDate,
-            CONCAT(rooms.ip_address, IFNULL(CONCAT(', ', GROUP_CONCAT(areas.areaIpAddress SEPARATOR ', ')), '')) AS ipList,
-            CONCAT(rooms.unlock_duration, IFNULL(CONCAT(', ', GROUP_CONCAT(areas.areaUnlockDuration SEPARATOR ', ')), '')) AS unlockTimeList
+            rooms.ip_address AS ipList,
+            rooms.unlock_duration AS unlockTimeList,
+            1 AS isValid  -- Indicates currently valid codes
         FROM codes 
         JOIN rooms ON rooms.roomid = codes.roomid
         JOIN properties ON rooms.propertyid = properties.propertyid 
-        LEFT JOIN areas ON properties.propertyid = areas.propertyId 
         WHERE properties.userid = ? 
           AND codes.isdeleted = 0 
           AND properties.isdeleted = 0 
           AND properties.isactive = 1
           AND codes.checkindatetime <= ?
           AND codes.checkoutdatetime >= ?
-        GROUP BY codes.barcode, codes.checkindatetime, codes.checkoutdatetime, rooms.ip_address, rooms.unlock_duration
-    `, [id, currentDateTime, currentDateTime]);
+      `,
+      [id, currentDateTime, currentDateTime]
+    );
+    console.log("Current Code Data:", currentCodeData);
+
+    // Fetch codes that are yet to be checked in, within the next 10 days
+    const [upcomingCodeData] = await pool.query(
+      `
+        SELECT 
+            codes.barcode AS qrCode, 
+            codes.checkindatetime AS checkInDate, 
+            codes.checkoutdatetime AS checkOutDate,
+            rooms.ip_address AS ipList,
+            rooms.unlock_duration AS unlockTimeList,
+            3 AS isValid  -- Indicates codes valid within the next 10 days
+        FROM codes 
+        JOIN rooms ON rooms.roomid = codes.roomid
+        JOIN properties ON rooms.propertyid = properties.propertyid 
+        WHERE properties.userid = ? 
+          AND codes.isdeleted = 0 
+          AND properties.isdeleted = 0 
+          AND properties.isactive = 1
+          AND codes.checkindatetime > ?
+          AND codes.checkindatetime <= ?
+      `,
+      [id, currentDateTime, tenDaysLater]
+    );
+    console.log("Upcoming Code Data:", upcomingCodeData);
+
+    // Combine both results
+    const codeData = [...currentCodeData, ...upcomingCodeData];
+
+    // Ensure that no code is duplicated and that codes with today's date have correct isValid value
+    const finalCodeData = codeData.reduce((acc, code) => {
+      const existing = acc.find((item) => item.qrCode === code.qrCode);
+      if (existing) {
+        // Prefer currently valid codes over upcoming ones
+        if (code.isValid === 1) {
+          existing.isValid = 1;
+        }
+      } else {
+        acc.push(code);
+      }
+      return acc;
+    }, []);
 
     return {
-        "codeData": codeData
+      codeData: finalCodeData,
     };
-}
+  } catch (error) {
+    console.error("Error in getCodes function:", error);
+    throw error; // Rethrow error to be caught by the endpoint handler
+  }
+};
