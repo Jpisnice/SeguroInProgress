@@ -1125,8 +1125,7 @@ export const getCodes = async (id) => {
             codes.checkindatetime AS checkInDate, 
             codes.checkoutdatetime AS checkOutDate,
             rooms.ip_address AS ipList,
-            rooms.unlock_duration AS unlockTimeList,
-            1 AS isValid  -- Indicates currently valid codes
+            rooms.unlock_duration AS unlockTimeList
         FROM codes 
         JOIN rooms ON rooms.roomid = codes.roomid
         JOIN properties ON rooms.propertyid = properties.propertyid 
@@ -1149,8 +1148,7 @@ export const getCodes = async (id) => {
             codes.checkindatetime AS checkInDate, 
             codes.checkoutdatetime AS checkOutDate,
             rooms.ip_address AS ipList,
-            rooms.unlock_duration AS unlockTimeList,
-            3 AS isValid  -- Indicates codes valid within the next 10 days
+            rooms.unlock_duration AS unlockTimeList
         FROM codes 
         JOIN rooms ON rooms.roomid = codes.roomid
         JOIN properties ON rooms.propertyid = properties.propertyid 
@@ -1169,21 +1167,9 @@ export const getCodes = async (id) => {
     const codeData = [...currentCodeData, ...upcomingCodeData];
 
     // Ensure that no code is duplicated and that codes with today's date have correct isValid value
-    const finalCodeData = codeData.reduce((acc, code) => {
-      const existing = acc.find((item) => item.qrCode === code.qrCode);
-      if (existing) {
-        // Prefer currently valid codes over upcoming ones
-        if (code.isValid === 1) {
-          existing.isValid = 1;
-        }
-      } else {
-        acc.push(code);
-      }
-      return acc;
-    }, []);
-
+    
     return {
-      codeData: finalCodeData,
+      codeData: codeData,
     };
   } catch (error) {
     console.error("Error in getCodes function:", error);
