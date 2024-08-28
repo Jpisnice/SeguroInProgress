@@ -1164,10 +1164,17 @@ export const getCodes = async (id) => {
     console.log("Upcoming Code Data:", upcomingCodeData);
 
     // Combine both results
-    const codeData = [...currentCodeData, ...upcomingCodeData];
+    let codeData = [...currentCodeData, ...upcomingCodeData];
+
+    // Remove duplicate entries based on qrCode (barcode)
+    codeData = codeData.filter(
+      (code, index, self) =>
+        index === self.findIndex((c) => c.qrCode === code.qrCode)
+    );
 
     // Ensure that no code is duplicated and that codes with today's date have correct isValid value
-    
+    //TODO: Implement the logic to set the isValid value correctly if needed
+
     return {
       codeData: codeData,
     };
@@ -1176,3 +1183,4 @@ export const getCodes = async (id) => {
     throw error; // Rethrow error to be caught by the endpoint handler
   }
 };
+
