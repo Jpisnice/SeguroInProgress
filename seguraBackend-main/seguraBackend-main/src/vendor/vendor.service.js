@@ -1102,11 +1102,7 @@ export const setDefaultCheckinCheckoutTime = async (id, checkInTime, checkOutTim
 // }
 export const getCodes = async (id) => {
   try {
-    // Initialize currentDateTime using the Date object
     const currentDateTime = currentDateAndTime();
-    console.log("Current DateTime:", currentDateTime);
-
-    // Calculate the date 10 days later
     const tenDaysLater = new Date(
       new Date(currentDateTime).setDate(
         new Date(currentDateTime).getDate() + 10
@@ -1115,72 +1111,77 @@ export const getCodes = async (id) => {
       .toISOString()
       .slice(0, 19)
       .replace("T", " ");
-    console.log("Ten Days Later:", tenDaysLater);
+
+    // First, fetch all the property IDs associated with the user
+    const [properties] = await pool.query(
+      `
+        SELECT propertyid 
+        FROM properties 
+        WHERE userid = ? 
+          AND isdeleted = 0 
+          AND isactive = 1
+      `,
+      [id]
+    );
+
+    const propertyIds = properties.map((prop) => prop.propertyid);
+
+    if (propertyIds.length === 0) {
+      return { codeData: [] }; // No properties found for the user
+    }
 
     // Fetch codes that are currently valid
     const [currentCodeData] = await pool.query(
       `
         SELECT 
             codes.barcode AS qrCode, 
-            codes.checkindatetime AS checkInDate, 
-            codes.checkoutdatetime AS checkOutDate,
+            DATE_FORMAT(codes.checkindatetime, '%Y-%m-%d %H:%i:%s') AS checkInDate, 
+            DATE_FORMAT(codes.checkoutdatetime, '%Y-%m-%d %H:%i:%s') AS checkOutDate,
             rooms.ip_address AS ipList,
             rooms.unlock_duration AS unlockTimeList
         FROM codes 
         JOIN rooms ON rooms.roomid = codes.roomid
-        JOIN properties ON rooms.propertyid = properties.propertyid 
-        WHERE properties.userid = ? 
+        WHERE rooms.propertyid IN (?) 
           AND codes.isdeleted = 0 
-          AND properties.isdeleted = 0 
-          AND properties.isactive = 1
+          AND codes.isactive = 1
           AND codes.checkindatetime <= ?
           AND codes.checkoutdatetime >= ?
       `,
-      [id, currentDateTime, currentDateTime]
+      [propertyIds, currentDateTime, currentDateTime]
     );
-    console.log("Current Code Data:", currentCodeData);
 
     // Fetch codes that are yet to be checked in, within the next 10 days
     const [upcomingCodeData] = await pool.query(
       `
         SELECT 
             codes.barcode AS qrCode, 
-            codes.checkindatetime AS checkInDate, 
-            codes.checkoutdatetime AS checkOutDate,
+            DATE_FORMAT(codes.checkindatetime, '%Y-%m-%d %H:%i:%s') AS checkInDate, 
+            DATE_FORMAT(codes.checkoutdatetime, '%Y-%m-%d %H:%i:%s') AS checkOutDate,
             rooms.ip_address AS ipList,
             rooms.unlock_duration AS unlockTimeList
         FROM codes 
         JOIN rooms ON rooms.roomid = codes.roomid
-        JOIN properties ON rooms.propertyid = properties.propertyid 
-        WHERE properties.userid = ? 
+        WHERE rooms.propertyid IN (?) 
           AND codes.isdeleted = 0 
-          AND properties.isdeleted = 0 
-          AND properties.isactive = 1
+          AND codes.isactive = 1
           AND codes.checkindatetime > ?
           AND codes.checkindatetime <= ?
       `,
-      [id, currentDateTime, tenDaysLater]
+      [propertyIds, currentDateTime, tenDaysLater]
     );
-    console.log("Upcoming Code Data:", upcomingCodeData);
 
-    // Combine both results
-    let codeData = [...currentCodeData, ...upcomingCodeData];
-
-    // Remove duplicate entries based on qrCode (barcode)
-    codeData = codeData.filter(
+    // Combine both results and remove duplicates based on qrCode (barcode)
+    let codeData = [...currentCodeData, ...upcomingCodeData].filter(
       (code, index, self) =>
         index === self.findIndex((c) => c.qrCode === code.qrCode)
     );
 
-    // Ensure that no code is duplicated and that codes with today's date have correct isValid value
-    //TODO: Implement the logic to set the isValid value correctly if needed
-
-    return {
-      codeData: codeData,
-    };
+    return { codeData };
   } catch (error) {
     console.error("Error in getCodes function:", error);
-    throw error; // Rethrow error to be caught by the endpoint handler
+    throw error;
   }
 };
+
+
 

@@ -66,19 +66,39 @@ export const updatePropertyDetails = async (req, res) => {
   console.log("Request Body:", req.body);
 
   const propertyId = req.params.id; // Extract propertyId from URL params
-  const { newRate, occupancyCap } = req.body; // Destructure from request body
+  const { newRate, occupancyCap, newRateEffectiveOn } = req.body; // Destructure from request body
 
   try {
     // Ensure propertyId is valid
     if (!propertyId) {
-      throw new Error("Property ID is required");
+      return res.status(400).json({
+        success: false,
+        message: "Property ID is required",
+      });
     }
 
+    // Ensure newRateEffectiveOn is a valid date or null
+    if (newRateEffectiveOn !== null && isNaN(Date.parse(newRateEffectiveOn))) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid date format for newRateEffectiveOn",
+      });
+    }
+
+    // Ensure occupancyCap is a valid integer or null
+    const validOccupancyCap = Number.isInteger(occupancyCap)
+      ? occupancyCap
+      : 0;
+
     // Call service to update property details
-    const result = await updatePropertyDetailsInDB(propertyId, {
+    const result = await adminService.updatePropertyDetailsInDB(propertyId, {
       newRate,
-      occupancyCap,
+      occupancyCap: validOccupancyCap,
+      newRateEffectiveOn: newRateEffectiveOn
+        ? new Date(newRateEffectiveOn)
+        : null,
     });
+
     return res.status(200).json({
       success: true,
       message: "Property details updated successfully",
@@ -93,6 +113,7 @@ export const updatePropertyDetails = async (req, res) => {
     });
   }
 };
+
 
 export const deleteVendor = async (req, res) => {
     const id = req.params.id;

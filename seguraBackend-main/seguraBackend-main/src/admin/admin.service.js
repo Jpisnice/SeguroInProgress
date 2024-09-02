@@ -260,33 +260,36 @@ export const toggleVendorProperties = async (id) => {
     return false;
   }
 };
-
 export const getVendorPropertiesWithRooms = async (id) => {
   const [rows] = await pool.query(
     `
     SELECT 
         p.propertyid,
         p.propertyname AS Property_Name,
-        COALESCE(sp.monthly_charge, 0) AS Current_Rate,
+        COALESCE(p.current_rate, NULL) AS Current_Rate,
+        COALESCE(p.new_rate, NULL) AS New_Rate,
+        COALESCE(p.new_rate_effective_on, 'N/A') AS New_Rate_Effective_On,
         p.number_of_rooms AS Number_Of_Rooms,
-        p.occupancy_cap AS Occupancy_Cap,  -- Added Occupancy_Cap column
-        COALESCE(p.last_pay_date, 'N/A') AS Last_Paid_Date,
+        p.occupancy_cap AS Occupancy_Cap,
+        COALESCE(p.address1, 'N/A') AS Address1,
+        COALESCE(p.address2, 'N/A') AS Address2,
+        COALESCE(p.city, 'N/A') AS City,
+        COALESCE(p.pincode, 'N/A') AS Pincode,
+        COALESCE(p.state, 'N/A') AS State,
+        COALESCE(p.propertyIpAddress, 'N/A') AS Property_Ip_Address,
+        COALESCE(p.propertyUnlockDuration, '15') AS Property_Unlock_Duration,
+        COALESCE(p.password, 'N/A') AS Password,
+        COALESCE(p.isactive, 1) AS Is_Active,
+        COALESCE(p.isdeleted, 0) AS Is_Deleted,
         COALESCE(p.planid, 0) AS Plan_ID,
-        COALESCE(p.plantype, 'N') AS Plan_Type,
-        COALESCE(sp.monthly_charge, 0) AS Last_Billed_Amount,
+        COALESCE(p.isactive, 1) AS Is_Active,
         CASE
-            WHEN p.plan_expiry_date >= CURDATE() AND p.isactive = 1 THEN
-                CASE
-                    WHEN p.plantype = 'M' THEN DATE_ADD(COALESCE(p.last_pay_date, CURDATE()), INTERVAL 1 MONTH)
-                    WHEN p.plantype = 'Y' THEN DATE_ADD(COALESCE(p.last_pay_date, CURDATE()), INTERVAL 1 YEAR)
-                    ELSE NULL
-                END
+            WHEN p.isactive = 1 AND p.new_rate_effective_on IS NOT NULL THEN
+                DATE_ADD(p.new_rate_effective_on, INTERVAL 1 MONTH)  -- Defaulting to monthly billing
             ELSE NULL
         END AS Next_Billing_Date
     FROM 
         properties p
-    LEFT JOIN 
-        subscription_plans sp ON p.planid = sp.planid
     WHERE 
         p.userid = ? AND p.isdeleted = 0;
     `,
@@ -298,38 +301,59 @@ export const getVendorPropertiesWithRooms = async (id) => {
 
 export const updatePropertyDetailsInDB = async (
   propertyId,
-  { newRate, occupancyCap }
+  { newRate, occupancyCap, newRateEffectiveOn }
 ) => {
-  let updateFields = [];
-  if (newRate !== null && newRate !== undefined) {
-    updateFields.push(`current_rate = ?`); // Use parameterized query to prevent SQL injection
-  }
-  if (occupancyCap !== null && occupancyCap !== undefined) {
-    updateFields.push(`occupancy_cap = ?`);
-  }
-
-  if (updateFields.length === 0) {
+  if (
+    newRate === null &&
+    newRate === undefined &&
+    occupancyCap === null &&
+    occupancyCap === undefined &&
+    newRateEffectiveOn === null &&
+    newRateEffectiveOn === undefined
+  ) {
     throw new Error("No fields to update");
   }
 
-  const query = `
-    UPDATE properties 
-    SET ${updateFields.join(", ")} 
-    WHERE propertyid = ?
-  `;
+  // Check if the property exists
+  const [property] = await pool.execute(
+    `SELECT propertyid FROM properties WHERE propertyid = ?`,
+    [propertyId]
+  );
 
-  // Parameters for the query
-  const queryParams = [
-    ...(newRate !== null && newRate !== undefined ? [newRate] : []),
-    ...(occupancyCap !== null && occupancyCap !== undefined
-      ? [occupancyCap ? 1 : 0]
-      : []),
-    propertyId,
-  ];
+  if (property.length === 0) {
+    throw new Error("Property not found");
+  }
 
-  const [result] = await pool.execute(query, queryParams);
-  return result;
+  // Build the query dynamically based on the fields that need to be updated
+  let query = "UPDATE properties SET ";
+  const params = [];
+
+  if (newRate !== null && newRate !== undefined) {
+    query += "current_rate = ?";
+    params.push(newRate);
+  }
+
+  if (occupancyCap !== null && occupancyCap !== undefined) {
+    if (params.length > 0) query += ", ";
+    query += "occupancy_cap = ?";
+    params.push(occupancyCap);
+  }
+
+  if (newRateEffectiveOn !== null && newRateEffectiveOn !== undefined) {
+    if (params.length > 0) query += ", ";
+    query += "new_rate_effective_on = ?";
+    params.push(newRateEffectiveOn);
+  }
+
+  query += " WHERE propertyid = ?";
+  params.push(propertyId);
+
+  // Execute the update query
+  await pool.execute(query, params);
+
+  return { success: true, message: "Property details updated successfully" };
 };
+
 
 export const deleteVendor = async (id) => {
   const vendor = await getVendor(id);

@@ -1,32 +1,39 @@
+
 "use client";
+// export default Page;
 import IconCaretBackOutline from "@/assets/js/IconCaretBackOutline";
 import apiService from "@/services/apiService";
-import {
-  Button,
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  Table,
-  TableBody,
-  TableCell,
-  TableColumn,
-  TableHeader,
-  TableRow,
-  useDisclosure,
-} from "@nextui-org/react";
-import moment from "moment";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState, useCallback } from "react";
 import useSWR from "swr";
+import moment from "moment";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { DatePickerDemo } from "@/components/ui/datepicker"; // Import DatePickerDemo
 
 const columns = [
   { name: "Property Name", uid: "Property_Name" },
   { name: "Current Rate", uid: "Current_Rate" },
   { name: "New Rate", uid: "New_Rate" },
+  { name: "New Rate Effective On", uid: "New_Rate_Effective_On" }, // New column
   { name: "Number of Rooms", uid: "Number_Of_Rooms" },
   { name: "Occupancy Cap", uid: "Occupancy_Cap" },
   { name: "Last Paid Date", uid: "Last_Paid_Date" },
@@ -42,7 +49,7 @@ const roomsColumns = [
   { name: "Last Opened", uid: "scandatetime" },
 ];
 
-const Page = () => {
+export default function Page() {
   const param = useSearchParams();
   const fetcher = (args) => apiService.get(args.api, args.body);
   const [vendorName, setVendorName] = useState("");
@@ -50,20 +57,16 @@ const Page = () => {
   const [graceDays, setGraceDays] = useState(14);
   const [newRates, setNewRates] = useState({});
   const [occupancyCaps, setOccupancyCaps] = useState({});
+  const [newRateEffectiveDates, setNewRateEffectiveDates] = useState({}); // State for new rate effective dates
+
   const { data, error, mutate, isLoading } = useSWR(
     { api: "admin/vendorProperties/" + param.get("id"), body: {} },
     fetcher
   );
 
-  const [activeId, setActiveId] = useState("");
   const [activeProperty, setActiveProperty] = useState({});
-  const { isOpen, onOpen, onOpenChange, onClose } = useDisclosure();
-  const {
-    isOpen: isDialogOpen,
-    onOpen: onDialogOpen,
-    onOpenChange: onDialogOpenChange,
-    onClose: onDialogClose,
-  } = useDisclosure();
+  const [isRoomsDialogOpen, setIsRoomsDialogOpen] = useState(false);
+  const [isGraceDialogOpen, setIsGraceDialogOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -74,7 +77,7 @@ const Page = () => {
 
   const showRooms = (rooms) => {
     setActiveRooms(rooms);
-    onOpen();
+    setIsRoomsDialogOpen(true);
   };
 
   const toggleIsActive = async (propertyId) => {
@@ -86,25 +89,24 @@ const Page = () => {
     }
   };
 
-  const openDialogModal = async (property) => {
+  const openGraceDialog = (property) => {
     setActiveProperty(property);
-    onDialogOpen();
+    setIsGraceDialogOpen(true);
   };
 
   const handleUpdate = async (propertyId) => {
     try {
-      // Ensure newRates and occupancyCaps have valid values
       const payload = {
         propertyid: propertyId,
-        newRate:
-          newRates[propertyId] !== undefined ? newRates[propertyId] : 30,
+        newRate: newRates[propertyId] !== undefined ? newRates[propertyId] : 30,
         occupancyCap:
           occupancyCaps[propertyId] !== undefined
             ? occupancyCaps[propertyId]
             : false,
+        newRateEffectiveOn: newRateEffectiveDates[propertyId]
+          ? moment(newRateEffectiveDates[propertyId]).format("YYYY-MM-DD")
+          : null, // Include effective date
       };
-
-      console.log("Updating property:", propertyId, payload);
 
       await apiService.put(
         `admin/updatePropertyDetails/${propertyId}`,
@@ -144,12 +146,26 @@ const Page = () => {
           );
         case "Occupancy_Cap":
           return (
-            <Switch
-              checked={occupancyCaps[propertyId] || false}
-              onCheckedChange={(checked) => {
+            <Input
+              type="number"
+              value={occupancyCaps[propertyId] || ""}
+              onChange={(e) => {
                 setOccupancyCaps((prev) => ({
                   ...prev,
-                  [propertyId]: checked,
+                  [propertyId]: Number(e.target.value),
+                }));
+              }}
+              onBlur={() => handleUpdate(propertyId)}
+            />
+          );
+        case "New_Rate_Effective_On":
+          return (
+            <DatePickerDemo
+              selectedDate={newRateEffectiveDates[propertyId]}
+              onDateChange={(date) => {
+                setNewRateEffectiveDates((prev) => ({
+                  ...prev,
+                  [propertyId]: date,
                 }));
                 handleUpdate(propertyId);
               }}
@@ -163,16 +179,15 @@ const Page = () => {
         case "enabledToggle":
           return (
             <Switch
-              color="primary"
-              onCheckedChange={() => toggleIsActive(propertyId)}
               checked={cellValue === "active"}
+              onCheckedChange={() => toggleIsActive(propertyId)}
             />
           );
         default:
           return cellValue || "-";
       }
     },
-    [newRates, occupancyCaps]
+    [newRates, occupancyCaps, newRateEffectiveDates]
   );
 
   const renderRoomCell = useCallback((item, columnKey) => {
@@ -190,7 +205,7 @@ const Page = () => {
         }
       );
       mutate();
-      onDialogClose();
+      setIsGraceDialogOpen(false);
     } catch (error) {
       console.error(
         "Error applying grace period:",
@@ -200,117 +215,85 @@ const Page = () => {
   };
 
   return (
-    <div>
-      <div className="px-4 pt-10 sm:ml-28">
-        <div className="flex justify-start items-center gap-4">
-          <Button onClick={() => router.back()} color="primary" isIconOnly>
-            <IconCaretBackOutline />
-          </Button>
-          <h1 className="text-3xl font-bold">
-            Property Registered Under {vendorName}
-          </h1>
-        </div>
-
-        <Table className="mt-10" aria-label="Example table with custom cells">
-          <TableHeader columns={columns}>
-            {(column) => (
-              <TableColumn
-                key={column.uid}
-                align={column.uid === "enabledToggle" ? "center" : "start"}
-              >
-                {column.name}
-              </TableColumn>
-            )}
-          </TableHeader>
-          <TableBody items={!isLoading ? data?.data : []}>
-            {(item) => (
-              <TableRow key={item.propertyid}>
-                {(columnKey) => (
-                  <TableCell>{renderCell(item, columnKey)}</TableCell>
-                )}
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        <div className="flex flex-col gap-4 justify-end mt-4 sm:flex-row">
-          {/* Pagination component or other UI elements can be added here */}
-        </div>
+    <div className="container mx-auto px-4 py-10">
+      <div className="flex items-center gap-4 mb-6">
+        <Button onClick={() => router.back()} variant="outline" size="icon">
+          <IconCaretBackOutline className="h-4 w-4" />
+        </Button>
+        <h1 className="text-3xl font-bold">
+          Property Registered Under {vendorName}
+        </h1>
       </div>
 
-      <Modal
-        size="2xl"
-        placement="center"
-        className="w-full"
-        isOpen={isOpen}
-        onOpenChange={onOpenChange}
-      >
-        <ModalContent>
-          {(onClose) => (
-            <form onSubmit={(e) => e.preventDefault()}>
-              <ModalHeader className="flex flex-col gap-1 text-black">
-                Rooms
-              </ModalHeader>
-              <ModalBody>
-                <Table aria-label="Room Details" className="mt-4">
-                  <TableHeader columns={roomsColumns}>
-                    {(column) => (
-                      <TableColumn key={column.uid}>{column.name}</TableColumn>
-                    )}
-                  </TableHeader>
-                  <TableBody items={activeRooms}>
-                    {(item) => (
-                      <TableRow key={item.room_id}>
-                        {(columnKey) => (
-                          <TableCell>
-                            {renderRoomCell(item, columnKey)}
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </ModalBody>
-              <ModalFooter>
-                <Button color="primary" onClick={onClose}>
-                  Close
-                </Button>
-              </ModalFooter>
-            </form>
-          )}
-        </ModalContent>
-      </Modal>
+      <Table>
+        <TableHeader>
+          {columns.map((column) => (
+            <TableHead key={column.uid}>{column.name}</TableHead>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {!isLoading &&
+            data?.data.map((item) => (
+              <TableRow key={item.propertyid}>
+                {columns.map((column) => (
+                  <TableCell key={column.uid}>
+                    {renderCell(item, column.uid)}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+        </TableBody>
+      </Table>
 
-      <Modal
-        isOpen={isDialogOpen}
-        onOpenChange={onDialogOpenChange}
-        placement="top-center"
-      >
-        <ModalContent>
-          {(onClose) => (
-            <form onSubmit={applyGracePeriod}>
-              <ModalHeader>Apply Grace Period</ModalHeader>
-              <ModalBody>
-                <Input
-                  value={graceDays}
-                  onChange={(e) => setGraceDays(Number(e.target.value))}
-                  type="number"
-                  min={1}
-                />
-              </ModalBody>
-              <ModalFooter>
-                <Button color="primary" type="submit">
-                  Apply
-                </Button>
-                <Button color="primary" variant="flat" onClick={onDialogClose}>
-                  Close
-                </Button>
-              </ModalFooter>
-            </form>
-          )}
-        </ModalContent>
-      </Modal>
+      <Dialog open={isRoomsDialogOpen} onOpenChange={setIsRoomsDialogOpen}>
+        <DialogContent className="sm:max-w-[800px]">
+          <DialogHeader>
+            <DialogTitle>Rooms</DialogTitle>
+          </DialogHeader>
+          <Table>
+            <TableHeader>
+              {roomsColumns.map((column) => (
+                <TableHead key={column.uid}>{column.name}</TableHead>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {activeRooms.map((item) => (
+                <TableRow key={item.room_id}>
+                  {roomsColumns.map((column) => (
+                    <TableCell key={column.uid}>
+                      {renderRoomCell(item, column.uid)}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <DialogFooter>
+            <Button onClick={() => setIsRoomsDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isGraceDialogOpen} onOpenChange={setIsGraceDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Apply Grace Period</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={applyGracePeriod}>
+            <div className="grid gap-4 py-4">
+              <Input
+                value={graceDays}
+                onChange={(e) => setGraceDays(Number(e.target.value))}
+                type="number"
+                min={1}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit">Apply</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
-};
-
-export default Page;
+}
